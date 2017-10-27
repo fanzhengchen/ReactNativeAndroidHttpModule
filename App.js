@@ -9,7 +9,8 @@ import {
   Platform,
   StyleSheet,
   Text,
-  View
+  View,
+  NativeModules
 } from 'react-native';
 
 const instructions = Platform.select({
@@ -27,14 +28,38 @@ export default class App extends Component<{}> {
           Welcome to React Native!
         </Text>
         <Text style={styles.instructions}>
-          To get started, edit App.js
+          To get started, edit App.js ggggg
         </Text>
         <Text style={styles.instructions}>
           {instructions}
         </Text>
+
+        <Text onPress={() => this.onPress()}>Fetch</Text>
+
+
       </View>
     );
   }
+
+  onPress(){
+    let url = "http://172.16.14.115:9876/home";
+    let options = {
+      "timeout":15000,
+      "method":"POST",
+      "headers":{},
+      "body":{"age":12,"name":"abcd"}
+    };
+    NativeModules.HttpClient.fetch(url,options)
+    .then((response) => {
+      console.log("rrrrrrrrrx");
+      console.log(response);
+    });
+  }
+
+
+
+
+
 }
 
 const styles = StyleSheet.create({
