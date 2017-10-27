@@ -51,7 +51,7 @@ export default class App extends Component<{}> {
     };
     NativeModules.HttpClient.fetch(url,options)
     .then((response) => {
-      console.log("rrrrrrrrrx");
+      console.log("rrrrrrrrrxx");
       console.log(response);
     });
   }
