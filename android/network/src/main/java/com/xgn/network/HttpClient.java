@@ -1,11 +1,17 @@
 package com.xgn.network;
 
+import android.util.Log;
+
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableMapKeySetIterator;
+import com.facebook.react.bridge.WritableMap;
+
+import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +35,11 @@ public class HttpClient extends ReactContextBaseJavaModule {
     private static final String METHOD = "method";
     private static final String HEADERS = "headers";
     private static final String BODY = "body";
+    private static final String HTTP_STATUS = "httpStatus";
+    private static final String ERROR = "error";
+    private static final String HEADER = "responseHeader";
+    private static final String CODE = "code";
+    private static final String MESSAGE = "message";
 
     private static OkHttpClient sOkHttpClient = new OkHttpClient.Builder()
             .build();
@@ -56,11 +67,12 @@ public class HttpClient extends ReactContextBaseJavaModule {
         /**
          * time out
          */
+        Log.d("fetch", url + " " + options.toString());
         OkHttpClient.Builder builder = sOkHttpClient.newBuilder();
         if (options.hasKey(TIME_OUT)) {
             int timeout = options.getInt(TIME_OUT);
             if (timeout != sOkHttpClient.connectTimeoutMillis()) {
-                builder.connectTimeout(timeout, TimeUnit.SECONDS);
+                builder.connectTimeout(timeout, TimeUnit.MILLISECONDS);
                 sOkHttpClient = builder.build();
             }
         }
@@ -72,7 +84,10 @@ public class HttpClient extends ReactContextBaseJavaModule {
 
         String method = "POST";
         if (options.hasKey(METHOD)) {
+
             method = options.getString(METHOD);
+            Log.d("has method", method);
+
         }
 
         RequestBody requestBody = new RequestBody() {
@@ -83,15 +98,25 @@ public class HttpClient extends ReactContextBaseJavaModule {
 
             @Override
             public void writeTo(BufferedSink bufferedSink) throws IOException {
-                ReadableMap map = options.getMap(BODY);
-                bufferedSink.write(map.toString().getBytes());
+                try {
+                    ReadableMap map = options.getMap(BODY);
+                    JSONObject jsonObject = MapUtil.toJSONObject(map);
+                    String string = jsonObject.toString();
+                    bufferedSink.write(string.getBytes());
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
             }
         };
 
         Request.Builder requestBuilder = new Request.Builder();
         Request request = requestBuilder.headers(headers)
+                .url(url)
                 .method(method, requestBody)
                 .build();
+
+        Log.e("http", "wwwwwwww");
 
         sOkHttpClient.newCall(request).enqueue(new Callback() {
             @Override
@@ -101,10 +126,15 @@ public class HttpClient extends ReactContextBaseJavaModule {
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                System.out.println(response.body().string());
+//                System.out.println(response.body().string());
+                try {
+                    promise.resolve(buildWritableMap(call, response));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
             }
         });
-
 
     }
 
@@ -118,5 +148,55 @@ public class HttpClient extends ReactContextBaseJavaModule {
             }
         }
         return builder.build();
+    }
+
+    private WritableMap buildWritableMap(Call call, Response response) throws Exception {
+
+        WritableMap bodyMap = null;
+        WritableMap responseMap = Arguments.createMap();
+        if (response != null && response.isSuccessful()) {
+
+            JSONObject jsonObject = new JSONObject(response.body().string());
+            WritableMap headerMap = createHeaderMap(response.headers());
+
+            bodyMap = MapUtil.jsonToReact(jsonObject);
+            responseMap.putBoolean(TIME_OUT, false);
+            responseMap.putMap(HEADER, headerMap);
+            responseMap.putInt(HTTP_STATUS, response.code());
+            responseMap.putMap(BODY, bodyMap);
+            responseMap.putMap(ERROR, null);
+        } else if (response == null) {
+            responseMap.putBoolean(TIME_OUT, true);
+            responseMap.putMap(BODY, null);
+
+            WritableMap errorMap = Arguments.createMap();
+            errorMap.putString(CODE, "404");
+            errorMap.putString(MESSAGE, "response is null");
+        } else {
+            JSONObject jsonObject = new JSONObject(response.body().string());
+            WritableMap headerMap = createHeaderMap(response.headers());
+            WritableMap errorMap = Arguments.createMap();
+            bodyMap = MapUtil.jsonToReact(jsonObject);
+
+            errorMap.putInt(CODE, response.code());
+            errorMap.putString(MESSAGE, response.message());
+            responseMap.putBoolean(TIME_OUT, false);
+            responseMap.putMap(BODY, null);
+            responseMap.putMap(ERROR, errorMap);
+        }
+
+
+        return responseMap;
+    }
+
+    private WritableMap createHeaderMap(Headers headers) {
+        WritableMap writableMap = Arguments.createMap();
+        int size = headers.size();
+        for (int i = 0; i < size; ++i) {
+            String name = headers.name(i);
+            String value = headers.value(i);
+            writableMap.putString(name, value);
+        }
+        return writableMap;
     }
 }
